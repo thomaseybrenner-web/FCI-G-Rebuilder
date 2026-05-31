@@ -1,0 +1,58 @@
+name: Monthly FCI-G
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "exact or flash"
+        required: true
+        default: "exact"
+  schedule:
+    # Run after the typical Zillow ZHVI release window. Adjust if Zillow's
+    # release calendar changes.
+    - cron: "0 14 21 * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest
+
+      - name: Download prepared exact input if configured
+        env:
+          EXACT_INPUT_DATA_URL: ${{ secrets.EXACT_INPUT_DATA_URL }}
+        run: |
+          if [ -n "$EXACT_INPUT_DATA_URL" ] && [ ! -f input_data.csv ]; then
+            curl --fail --location "$EXACT_INPUT_DATA_URL" --output input_data.csv
+          fi
+
+      - name: Build FCI-G from prepared input
+        run: |
+          if [ ! -f input_data.csv ]; then
+            echo "No input_data.csv found. Commit one or configure EXACT_INPUT_DATA_URL."
+            exit 1
+          fi
+          python -m fci_g.cli \
+            --input input_data.csv \
+            --multipliers data/multipliers.csv \
+            --out-dir output
+
+      - name: Upload outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: fci-g-output
+          path: output/*.csv
