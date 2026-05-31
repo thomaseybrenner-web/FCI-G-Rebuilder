@@ -7,10 +7,9 @@ three-month financial-condition changes.
 The repo supports two use cases:
 
 1. **Exact replication**: provide the same seven driver series used by the Fed,
-   transformed into the `input_data.csv` format described below.
-2. **Flash/proxy estimate**: use public/free data where possible, with any
-   substitutions clearly documented. This is useful before Zillow ZHVI is
-   released, but it is not the official-equivalent series.
+   either as a prepared `input_data.csv` or as raw levels/rates.
+2. **Redfin flash estimate**: use the same six non-housing primary inputs, but
+   replace only Zillow ZHVI with Redfin's home-price index.
 
 ## Why GitHub Helps
 
@@ -40,6 +39,8 @@ Each value should already be a three-month change:
 
 ## Run
 
+If you already have the Fed-style three-month changes:
+
 ```bash
 python -m fci_g.cli \
   --input path/to/input_data.csv \
@@ -54,16 +55,65 @@ output/threeyearFCI_output.csv
 output/oneyearFCI_output.csv
 ```
 
+If you have raw input levels/rates and a Redfin home-price file:
+
+```bash
+python -m fci_g.build_series \
+  --primary-raw path/to/primary_raw.csv \
+  --redfin path/to/redfin_home_price_index.csv \
+  --redfin-date-col date \
+  --redfin-value-col houseIndex \
+  --multipliers data/multipliers.csv \
+  --out-dir output
+```
+
+This writes both primary and flash outputs:
+
+```text
+output/primary_input_data.csv
+output/primary_threeyearFCI_output.csv
+output/primary_oneyearFCI_output.csv
+output/flash_redfin_input_data.csv
+output/flash_redfin_threeyearFCI_output.csv
+output/flash_redfin_oneyearFCI_output.csv
+```
+
+## Raw Input Format
+
+For `primary_raw.csv`, use one wide file with these columns:
+
+```text
+date,FFR,T10yr,Mort30yr,bbbCorpBond,Stockmkt,houseIndex,dollarIndex
+```
+
+Daily rows are preferred for `FFR`, `T10yr`, `Mort30yr`, `bbbCorpBond`,
+`Stockmkt`, and `dollarIndex`. Monthly rows are fine for Zillow `houseIndex`.
+Missing cells are acceptable when a series is not observed on a given date.
+
+For `redfin_home_price_index.csv`, use a national Redfin Home Price Index file.
+The default expected columns are:
+
+```text
+date,houseIndex
+```
+
+If Redfin's download uses different names, pass them with `--redfin-date-col`
+and `--redfin-value-col`.
+
+The flash series is then built by taking the full primary transformed input and
+replacing only the `houseIndex` three-month change with Redfin's equivalent
+three-month log change.
+
 ## Scheduled Updates
 
 The included GitHub Actions workflow runs monthly and can also be launched
-manually. For exact replication, upload or generate `input_data.csv` before the
-calculation step. For production use, store any licensed-data credentials as
-GitHub Actions secrets.
+manually. For production use, store any licensed-data credentials or private
+download URLs as GitHub Actions secrets.
 
-The workflow checks for `input_data.csv` in the repository first. If that is not
-present, it can download one from a private URL stored as the
-`EXACT_INPUT_DATA_URL` repository secret.
+The workflow checks for `primary_raw.csv` and `redfin_home_price_index.csv` in
+the repository first. If they are not present, it can download them from private
+URLs stored as `PRIMARY_RAW_DATA_URL` and `REDFIN_HOME_PRICE_URL` repository
+secrets.
 
 ## Earliest Exact Monthly Update
 
@@ -79,4 +129,4 @@ ZHVI is available, currently scheduled for June 18, 2026.
 | Zillow ZHVI | Around the third week of the following month | Exact Fed-compatible choice |
 | FHFA Purchase-Only HPI | Often end of following or later month | Public repeat-sales index, but slower |
 | Case-Shiller National HPI | Roughly two-month lag | High-quality repeat-sales index, but slower |
-| Redfin Home Price Index or Redfin weekly price data | Faster | Best for a flash estimate, not exact replication |
+| Redfin Home Price Index | Published monthly, before/around the Zillow release window | Used only for the flash series; all other primary inputs are unchanged |

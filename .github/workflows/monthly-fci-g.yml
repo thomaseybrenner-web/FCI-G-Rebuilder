@@ -32,22 +32,31 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Download prepared exact input if configured
+      - name: Download raw inputs if configured
         env:
-          EXACT_INPUT_DATA_URL: ${{ secrets.EXACT_INPUT_DATA_URL }}
+          PRIMARY_RAW_DATA_URL: ${{ secrets.PRIMARY_RAW_DATA_URL }}
+          REDFIN_HOME_PRICE_URL: ${{ secrets.REDFIN_HOME_PRICE_URL }}
         run: |
-          if [ -n "$EXACT_INPUT_DATA_URL" ] && [ ! -f input_data.csv ]; then
-            curl --fail --location "$EXACT_INPUT_DATA_URL" --output input_data.csv
+          if [ -n "$PRIMARY_RAW_DATA_URL" ] && [ ! -f primary_raw.csv ]; then
+            curl --fail --location "$PRIMARY_RAW_DATA_URL" --output primary_raw.csv
+          fi
+          if [ -n "$REDFIN_HOME_PRICE_URL" ] && [ ! -f redfin_home_price_index.csv ]; then
+            curl --fail --location "$REDFIN_HOME_PRICE_URL" --output redfin_home_price_index.csv
           fi
 
-      - name: Build FCI-G from prepared input
+      - name: Build primary and Redfin-flash FCI-G
         run: |
-          if [ ! -f input_data.csv ]; then
-            echo "No input_data.csv found. Commit one or configure EXACT_INPUT_DATA_URL."
+          if [ ! -f primary_raw.csv ]; then
+            echo "No primary_raw.csv found. Commit one or configure PRIMARY_RAW_DATA_URL."
             exit 1
           fi
-          python -m fci_g.cli \
-            --input input_data.csv \
+          if [ ! -f redfin_home_price_index.csv ]; then
+            echo "No redfin_home_price_index.csv found. Commit one or configure REDFIN_HOME_PRICE_URL."
+            exit 1
+          fi
+          python -m fci_g.build_series \
+            --primary-raw primary_raw.csv \
+            --redfin redfin_home_price_index.csv \
             --multipliers data/multipliers.csv \
             --out-dir output
 
